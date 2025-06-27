@@ -1,0 +1,80 @@
+name: Deploy to Rancher
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release-jobs:
+    if: github.event.pull_request.merged == true || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: write-all
+    strategy:
+      matrix:
+        JOB_NAME: [xxxxxxxxxx] #Altere para o nome do repositório em minúsculo
+
+    steps:
+      - name: Notifica início no Discord ## Adicione o nome do repositório para identificação na linha 25
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{"content": "O processo de deploy do xxxxxxxxxx foi iniciado."}' \
+          https://discord.com/api/webhooks/1337422789560500336/CHk2qABx8Ws9PHBjXyVRtT9Txg6jW_14kyccrezh7V53pj2QjPSWnMlPR0PlBZQfqg3E
+
+      - name: Copia o repositorio para a maquina
+        uses: actions/checkout@v4.1.6
+
+      - name: Extrai versão do package.json
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+
+      - name: Define IMAGE_HOSTING_NAME
+        run: |
+          REP_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')
+          IMAGE_HOSTING_NAME=ghcr.io/${REP_OWNER}
+          echo "IMAGE_HOSTING_NAME=$IMAGE_HOSTING_NAME" >> $GITHUB_ENV
+
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN }} ## Lembre-se de criar essa chave no repositório
+
+      - name: Cria a imagem Docker
+        run: |
+          IMAGE_NAME=${{ env.IMAGE_HOSTING_NAME }}/${{ matrix.JOB_NAME }}
+          docker build \
+            --tag $IMAGE_NAME:${{ env.VERSION }} \
+            --tag $IMAGE_NAME:latest \
+            .
+
+      - name: Publica a imagem Docker
+        run: |
+          IMAGE_NAME=${{ env.IMAGE_HOSTING_NAME }}/${{ matrix.JOB_NAME }}
+          docker push $IMAGE_NAME:${{ env.VERSION }}
+          docker push $IMAGE_NAME:latest
+
+      - name: Configura credenciais da AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+          
+      - name: Atualiza imagem no Kubernetes
+        run: |
+          aws eks update-kubeconfig --name eks-fsw-01 --region us-east-1
+          kubectl rollout restart deployment/webview -n mscredsystem
+
+      - name: Notifica finalização no Discord ## Adicione o nome do repositório para identificação na linha 76
+        run: |
+          curl -X POST -H "Content-Type: application/json" \
+          -d '{"content": "O processo de deploy do xxxxxxxxxx foi finalizado."}' \
+          https://discord.com/api/webhooks/1337422789560500336/CHk2qABx8Ws9PHBjXyVRtT9Txg6jW_14kyccrezh7V53pj2QjPSWnMlPR0PlBZQfqg3E
+             

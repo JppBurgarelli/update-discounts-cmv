@@ -1,0 +1,53 @@
+{
+  "name": "ecommerce-sync-stock",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx --watch src/config/server.ts",
+    "build": "tsup src --out-dir build",
+    "start": "node build/config/server.js",
+    "lint": "eslint . --max-warnings=5",
+    "format": "prettier . --check --ignore-unknown",
+    "format:fix": "prettier . --write --ignore-unknown",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@eslint/js": "^9.19.0",
+    "@types/axios": "^0.9.36",
+    "@types/node": "^22.10.7",
+    "@typescript-eslint/eslint-plugin": "^8.21.0",
+    "eslint": "^8.57.1",
+    "eslint-import-resolver-typescript": "^4.4.2",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-perfectionist": "^4.7.0",
+    "eslint-plugin-prettier": "^5.2.3",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3",
+    "prettier": "3.4.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "dotenv": "^16.4.7",
+    "elastic-apm-node": "^4.11.0",
+    "fastify": "^5.2.1",
+    "oracledb": "^6.7.1",
+    "pg": "^8.16.2",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.20",
+    "zod": "^3.24.1"
+  },
+  "lint-staged": {
+    "*.{.java}": [
+      "eslint --fix --report-unused-disable-directives --max-warnings=0 --ignore",
+      "prettier --write --ignore-unknown"
+    ]
+  }
+}
