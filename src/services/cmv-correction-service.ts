@@ -45,8 +45,7 @@ export class CmvCorrectionService {
     SELECT vtex_id, discounts 
     FROM orders 
     WHERE created_at BETWEEN TO_DATE('27/03/2025', 'DD/MM/YYYY') AND TO_DATE('13/06/2025', 'DD/MM/YYYY')
-    AND discounts > 0
-    FETCH FIRST 5 ROWS ONLY;
+    AND discounts > 0;
     `;
 
     try {
