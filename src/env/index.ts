@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { z } from 'zod';
 
 const serverEnvSchema = {
-  APP_PORT: z.coerce.number().default(3333),
+  APP_PORT: z.coerce.number().default(3334),
   ELASTIC_APM_SERVER_URL: z
     .string()
     .default('http://srv-elastic-01.oscar:8200'),
@@ -29,10 +29,17 @@ const sentryDatabaseSchema = {
     .min(1, 'Sentry Database service name is required'),
 };
 
+const vtexEnvironmentsVariavlesSchema = {
+  VTEX_API_KEY: z.string().min(1, 'VTEX key is required'),
+  VTEX_API_TOKEN: z.string().min(1, 'VTEX toekn is required'),
+  VTEX_DEFAULT_URL: z.string().min(1, 'VTEX_DEFAULT_URL is required'),
+};
+
 const envSchema = z.object({
   ...serverEnvSchema,
   ...databaseEnvSchema,
   ...sentryDatabaseSchema,
+  ...vtexEnvironmentsVariavlesSchema,
 });
 
 const _env = envSchema.safeParse(process.env);

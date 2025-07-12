@@ -34,7 +34,7 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "axios": "^1.9.0",
+    "axios": "^1.10.0",
     "dotenv": "^16.4.7",
     "elastic-apm-node": "^4.11.0",
     "fastify": "^5.2.1",
