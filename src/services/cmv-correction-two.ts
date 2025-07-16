@@ -11,12 +11,6 @@ type OrderFromSentryOutput = {
   vtex_id: string;
 };
 
-type MegaDiscountQueryOutput = {
-  DESCONTOPERCENTUAL: number;
-  DESCONTOVALOR: number | string;
-  VALORBRUTO: number;
-};
-
 type SentryQuantityOutput = {
   quantity: number;
 };
