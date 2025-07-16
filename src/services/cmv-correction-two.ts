@@ -17,6 +17,10 @@ type MegaDiscountQueryOutput = {
   VALORBRUTO: number;
 };
 
+type SentryQuantityOutput = {
+  quantity: number;
+};
+
 class LoggerService {
   private readonly logFilePath = './logs/log-orcamento-orcamento-produto.log';
 
@@ -83,7 +87,7 @@ class OrderUpdater {
       Math.round(((100 * discount) / valorBruto) * 100) / 100;
 
     const getQuantityFromSentry = `SELECT quantity FROM items WHERE order_id = $1`;
-    const getQuantity: { quantity: number }[] = await SentryDatasource.query(
+    const getQuantity: SentryQuantityOutput[] = await SentryDatasource.query(
       getQuantityFromSentry,
       [orderId]
     );
@@ -188,7 +192,7 @@ export class CmvCorrectionServiceTwo {
 
         const updated = await this.orderUpdater.updateIfNeededOrcamentoFromMega(
           order.id,
-          '1545820607546-02',
+          order.vtex_id,
           order.discounts,
           order.freight_value,
           order.total
@@ -196,7 +200,7 @@ export class CmvCorrectionServiceTwo {
 
         if (updated) {
           await this.productUpdater.updateOrcamentoProdutoFromMega(
-            '1545820607546-02'
+            order.vtex_id
           );
           this.updatedCount++;
           await this.sleep(1000);
