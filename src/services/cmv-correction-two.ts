@@ -39,7 +39,6 @@ class LoggerService {
 
 class OrderUpdater {
   constructor(private logger: LoggerService) { }
-
   public async updateIfNeededOrcamentoFromMega(
     orderId: number,
     vtexId: string,
@@ -47,32 +46,26 @@ class OrderUpdater {
     freight_value: number,
     valorLiquido: number
   ): Promise<boolean> {
-    const selectQuery = `
-      SELECT DESCONTOVALOR
-      FROM T_ORCAMENTO
-      WHERE PEDIDOECOMMERCE = :1
-    `;
+    const getQuantityFromSentry = `SELECT quantity FROM items WHERE order_id = $1`;
 
-    const result: MegaDiscountQueryOutput[] = await MegaAppDataSource.query(
-      selectQuery,
-      [vtexId]
-    );
+    const [quantities] = await Promise.all([
+      SentryDatasource.query<SentryQuantityOutput[]>(getQuantityFromSentry, [
+        orderId,
+      ]),
+    ]);
 
-    if (result.length === 0) {
-      this.logger.log(`Order ${vtexId} not found in Mega`);
+    if (!quantities.length) {
+      this.logger.log(`No quantity records found for ${vtexId}`);
       return false;
     }
 
-    const currentDiscountFromMega = Number(result[0].DESCONTOVALOR) || 0;
-
-    if (currentDiscountFromMega !== discount) {
-      await MegaAppDataSource.query(
-        `UPDATE T_ORCAMENTO SET DESCONTOVALOR = :1 WHERE PEDIDOECOMMERCE = :2`,
-        [discount, vtexId]
-      );
-      this.logger.log(`Updated DESCONTOVALOR for ${vtexId}`);
-    } else {
-      this.logger.log(`This discount for ${vtexId} is already up to date`);
+    const totalQuantity = quantities.reduce(
+      (acc, cv) => acc + Number(cv.quantity),
+      0
+    );
+    if (!totalQuantity) {
+      this.logger.log(`Total quantity is zero for ${vtexId}`);
+      return false;
     }
 
     const valorBruto = valorLiquido + discount - freight_value;
@@ -86,37 +79,19 @@ class OrderUpdater {
     const discountPercentage =
       Math.round(((100 * discount) / valorBruto) * 100) / 100;
 
-    const getQuantityFromSentry = `SELECT quantity FROM items WHERE order_id = $1`;
-    const getQuantity: SentryQuantityOutput[] = await SentryDatasource.query(
-      getQuantityFromSentry,
-      [orderId]
-    );
-
-    if (!getQuantity.length) {
-      this.logger.log(`No quantity records found for ${vtexId}`);
-      return false;
-    }
-
-    const totalQuantity = getQuantity.reduce(
-      (acc, cv) => acc + Number(cv.quantity),
-      0
-    );
-
-    if (!totalQuantity) {
-      this.logger.log(`Total quantity is zero for ${vtexId}`);
-      return false;
-    }
-
-    const queryUpdateDescontoPercentual = `
+    const queryUpdate = `
       UPDATE T_ORCAMENTO
-      SET DESCONTOPERCENTUAL = :1,
-          VALORBRUTO = :2,
-          VALOR = :3,
-          TOTALDEPECAS = :4
-      WHERE PEDIDOECOMMERCE = :5
+      SET
+        DESCONTOVALOR = :1,
+        DESCONTOPERCENTUAL = :2,
+        VALORBRUTO = :3,
+        VALOR = :4,
+        TOTALDEPECAS = :5
+      WHERE PEDIDOECOMMERCE = :6
     `;
 
-    await MegaAppDataSource.query(queryUpdateDescontoPercentual, [
+    const result = await MegaAppDataSource.query(queryUpdate, [
+      discount,
       discountPercentage,
       valorBruto,
       valorLiquido,
@@ -125,9 +100,20 @@ class OrderUpdater {
     ]);
 
     this.logger.log(
-      `Updated DESCONTOPERCENTUAL, VALORBRUTO, VALORLIQUIDO and TOTALDEPECAS for ${vtexId}`
+      `Raw update result for ${vtexId}: ${JSON.stringify(result)}`
     );
-    return true;
+
+    const updated = typeof result === 'number' ? result : 0;
+
+    if (updated > 0) {
+      this.logger.log(`Updated fields for ${vtexId}`);
+      return true;
+    } else {
+      this.logger.log(
+        `No rows updated for ${vtexId} — possibly vtexId not found`
+      );
+      return false;
+    }
   }
 }
 
@@ -141,9 +127,7 @@ class ProductUpdater {
       WHERE PEDIDOECOMMERCE = :1
     `;
 
-    const result = await MegaAppDataSource.query(orcamentoQuery, [
-      '1545820607546-02',
-    ]);
+    const result = await MegaAppDataSource.query(orcamentoQuery, [vtexId]);
     if (result.length === 0) {
       this.logger.log(`No orcamento found for ${vtexId}`);
       return;
