@@ -5,6 +5,9 @@ import { SentryDatasource } from '../db/sentry-datasource';
 
 type OrderFromSentryOutput = {
   discounts: number;
+  freight_value: number;
+  id: number;
+  total: number;
   vtex_id: string;
 };
 
@@ -34,20 +37,21 @@ class OrderUpdater {
   constructor(private logger: LoggerService) { }
 
   public async updateIfNeededOrcamentoFromMega(
+    orderId: number,
     vtexId: string,
-    discount: number
+    discount: number,
+    freight_value: number,
+    valorLiquido: number
   ): Promise<boolean> {
     const selectQuery = `
-      SELECT 
-        DESCONTOVALOR,
-        VALORBRUTO
+      SELECT DESCONTOVALOR
       FROM T_ORCAMENTO
       WHERE PEDIDOECOMMERCE = :1
-    `;
+`;
 
     const result: MegaDiscountQueryOutput[] = await MegaAppDataSource.query(
       selectQuery,
-      ['1545820607546-02']
+      [vtexId]
     );
 
     if (result.length === 0) {
@@ -55,8 +59,18 @@ class OrderUpdater {
       return false;
     }
 
-    const currentDiscount = Number(result[0].DESCONTOVALOR) || 0;
-    const valorBruto = Number(result[0].VALORBRUTO) || 0;
+    const valorBruto = valorLiquido + discount - freight_value;
+    const currentDiscountFromMega = Number(result[0].DESCONTOVALOR) || 0;
+
+    if (currentDiscountFromMega !== discount) {
+      await MegaAppDataSource.query(
+        `UPDATE T_ORCAMENTO SET DESCONTOVALOR = :1 WHERE PEDIDOECOMMERCE = :2`,
+        [discount, vtexId]
+      );
+      this.logger.log(`Updated DESCONTOVALOR for ${vtexId}`);
+    } else {
+      this.logger.log(`This discount for ${vtexId} is already up to date`);
+    }
 
     if (valorBruto === 0) {
       this.logger.log(
@@ -65,34 +79,41 @@ class OrderUpdater {
       return false;
     }
 
-    if (currentDiscount !== discount) {
-      const updateQuery = `
-        UPDATE T_ORCAMENTO
-        SET DESCONTOVALOR = :1
-        WHERE PEDIDOECOMMERCE = :2
-      `;
-      await MegaAppDataSource.query(updateQuery, [discount, vtexId]);
-      this.logger.log(`Updated DESCONTOVALOR for ${vtexId}`);
-    } else {
-      this.logger.log(`This discount for ${vtexId} is already up to date`);
-    }
-
     const discountPercentage =
       Math.round(((100 * discount) / valorBruto) * 100) / 100;
 
+    const getQuantityFromSentry = `SELECT quantity FROM items  WHERE order_id = $1`;
+    const getQuantity = await SentryDatasource.query(getQuantityFromSentry, [
+      orderId,
+    ]);
+
+    if (!getQuantity.length || !getQuantity[0].quantity) {
+      this.logger.log(`Quantity unavailable for ${vtexId}`);
+      return false;
+    }
+
+    const quantity = getQuantity[0].quantity;
+
     const queryUpdateDescontoPercentual = `
       UPDATE T_ORCAMENTO
-      SET DESCONTOPERCENTUAL = :1
-      WHERE PEDIDOECOMMERCE = :2
-    `;
+      SET DESCONTOPERCENTUAL = :1,
+          VALORBRUTO = :2,
+          VALOR = :3,
+          TOTALDEPECAS = :4
+      WHERE PEDIDOECOMMERCE = :5
+`;
 
     await MegaAppDataSource.query(queryUpdateDescontoPercentual, [
       discountPercentage,
+      valorBruto,
+      valorLiquido,
+      quantity,
       vtexId,
     ]);
 
-    this.logger.log(`Updated DESCONTOPERCENTUAL for ${vtexId}`);
-
+    this.logger.log(
+      `Updated DESCONTOPERCENTUAL, VALORBRUTO, VALORLIQUIDO and TOTALDEPECAS and other fields for ${vtexId}`
+    );
     return true;
   }
 }
@@ -157,8 +178,11 @@ export class CmvCorrectionServiceTwo {
         }
 
         const updated = await this.orderUpdater.updateIfNeededOrcamentoFromMega(
+          order.id,
           '1545820607546-02',
-          order.discounts
+          order.discounts,
+          order.freight_value,
+          order.total
         );
 
         if (updated) {
@@ -185,11 +209,11 @@ export class CmvCorrectionServiceTwo {
 
   private async getOrdersFromSentry(): Promise<OrderFromSentryOutput[]> {
     const query = `
-  SELECT vtex_id, discounts
-  FROM orders
-  WHERE created_at BETWEEN TO_DATE('27/03/2025', 'DD/MM/YYYY') AND TO_DATE('13/06/2025', 'DD/MM/YYYY')
-    ORDER BY created_at DESC
-  FETCH FIRST 5 ROWS ONLY
+                SELECT id, vtex_id, discounts, freight_value, total
+                FROM orders
+                WHERE created_at BETWEEN TO_DATE('27/03/2025', 'DD/MM/YYYY') AND TO_DATE('13/06/2025', 'DD/MM/YYYY')
+                  ORDER BY created_at DESC
+                FETCH FIRST 5 ROWS ONLY
     `;
 
     try {
