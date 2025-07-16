@@ -47,7 +47,7 @@ class OrderUpdater {
       SELECT DESCONTOVALOR
       FROM T_ORCAMENTO
       WHERE PEDIDOECOMMERCE = :1
-`;
+    `;
 
     const result: MegaDiscountQueryOutput[] = await MegaAppDataSource.query(
       selectQuery,
@@ -59,7 +59,6 @@ class OrderUpdater {
       return false;
     }
 
-    const valorBruto = valorLiquido + discount - freight_value;
     const currentDiscountFromMega = Number(result[0].DESCONTOVALOR) || 0;
 
     if (currentDiscountFromMega !== discount) {
@@ -72,6 +71,7 @@ class OrderUpdater {
       this.logger.log(`This discount for ${vtexId} is already up to date`);
     }
 
+    const valorBruto = valorLiquido + discount - freight_value;
     if (valorBruto === 0) {
       this.logger.log(
         `VALORBRUTO is zero for ${vtexId}, cannot compute discount percentage.`
@@ -82,17 +82,26 @@ class OrderUpdater {
     const discountPercentage =
       Math.round(((100 * discount) / valorBruto) * 100) / 100;
 
-    const getQuantityFromSentry = `SELECT quantity FROM items  WHERE order_id = $1`;
-    const getQuantity = await SentryDatasource.query(getQuantityFromSentry, [
-      orderId,
-    ]);
+    const getQuantityFromSentry = `SELECT quantity FROM items WHERE order_id = $1`;
+    const getQuantity: { quantity: number }[] = await SentryDatasource.query(
+      getQuantityFromSentry,
+      [orderId]
+    );
 
-    if (!getQuantity.length || !getQuantity[0].quantity) {
-      this.logger.log(`Quantity unavailable for ${vtexId}`);
+    if (!getQuantity.length) {
+      this.logger.log(`No quantity records found for ${vtexId}`);
       return false;
     }
 
-    const quantity = getQuantity[0].quantity;
+    const totalQuantity = getQuantity.reduce(
+      (acc, cv) => acc + Number(cv.quantity),
+      0
+    );
+
+    if (!totalQuantity) {
+      this.logger.log(`Total quantity is zero for ${vtexId}`);
+      return false;
+    }
 
     const queryUpdateDescontoPercentual = `
       UPDATE T_ORCAMENTO
@@ -101,18 +110,18 @@ class OrderUpdater {
           VALOR = :3,
           TOTALDEPECAS = :4
       WHERE PEDIDOECOMMERCE = :5
-`;
+    `;
 
     await MegaAppDataSource.query(queryUpdateDescontoPercentual, [
       discountPercentage,
       valorBruto,
       valorLiquido,
-      quantity,
+      totalQuantity,
       vtexId,
     ]);
 
     this.logger.log(
-      `Updated DESCONTOPERCENTUAL, VALORBRUTO, VALORLIQUIDO and TOTALDEPECAS and other fields for ${vtexId}`
+      `Updated DESCONTOPERCENTUAL, VALORBRUTO, VALORLIQUIDO and TOTALDEPECAS for ${vtexId}`
     );
     return true;
   }
