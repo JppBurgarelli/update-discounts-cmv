@@ -100,7 +100,8 @@ export class InvoiceDateCorrectionService {
   private shouldUpdateDate(megaDate: Date, sentryDate: Date): boolean {
     const diffMs = Math.abs(megaDate.getTime() - sentryDate.getTime());
     const diffMinutes = diffMs / (1000 * 60);
-    return diffMinutes > 5;
+    const fifteenHoursInMinutes = 15 * 60;
+    return diffMinutes > fifteenHoursInMinutes;
   }
 
   private sleep(ms: number): Promise<void> {
