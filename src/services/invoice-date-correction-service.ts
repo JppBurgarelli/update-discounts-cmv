@@ -9,7 +9,7 @@ type TOrdersFromMega = {
 };
 
 class LoggerService {
-  private readonly logFilePath = './logs/log-orcamento-produto-ocorrencias.log';
+  private readonly logFilePath = './logs/invoice-date-correction.log';
 
   public log(message: string): void {
     const timestamp = new Date().toISOString();
@@ -38,13 +38,16 @@ export class InvoiceDateCorrectionService {
         );
         const nfeDate: Date = await this.getNfeDate(orderId);
 
-        if (this.shouldUpdateDate(orderFromMega.DATA, nfeDate)) {
+        const adjustedNfeDate = new Date(nfeDate);
+        adjustedNfeDate.setHours(adjustedNfeDate.getHours() - 3);
+
+        if (this.shouldUpdateDate(orderFromMega.DATA, adjustedNfeDate)) {
           await this.updateOrcamentoDataInMega(
             orderFromMega.PEDIDOECOMMERCE,
-            nfeDate
+            adjustedNfeDate
           );
           this.logger.log(
-            `✅ ${orderFromMega.PEDIDOECOMMERCE} updated successfully`
+            `✅ ${orderFromMega.PEDIDOECOMMERCE} updated successfully from (${orderFromMega.DATA}) to (${adjustedNfeDate})`
           );
           updatedVtexIds.push(orderFromMega.PEDIDOECOMMERCE);
         }
@@ -53,6 +56,8 @@ export class InvoiceDateCorrectionService {
           `❌ Error processing ${orderFromMega.PEDIDOECOMMERCE}: ${error}`
         );
       }
+
+      await this.sleep(500);
     }
 
     if (updatedVtexIds.length > 0) {
@@ -93,13 +98,13 @@ export class InvoiceDateCorrectionService {
   }
 
   private shouldUpdateDate(megaDate: Date, sentryDate: Date): boolean {
-    const adjustedSentryDate = new Date(sentryDate);
-    adjustedSentryDate.setHours(adjustedSentryDate.getHours() - 3);
-
-    const diffMs = Math.abs(megaDate.getTime() - adjustedSentryDate.getTime());
+    const diffMs = Math.abs(megaDate.getTime() - sentryDate.getTime());
     const diffMinutes = diffMs / (1000 * 60);
-
     return diffMinutes > 5;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async updateOrcamentoDataInMega(
