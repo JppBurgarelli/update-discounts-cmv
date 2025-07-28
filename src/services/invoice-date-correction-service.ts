@@ -8,6 +8,11 @@ type TOrdersFromMega = {
   PEDIDOECOMMERCE: string;
 };
 
+type TOrderRecord = {
+  id: number;
+  status: string;
+};
+
 class LoggerService {
   private readonly logFilePath = './logs/invoice-date-correction.log';
 
@@ -36,6 +41,7 @@ export class InvoiceDateCorrectionService {
         const orderId: number = await this.getOrderid(
           orderFromMega.PEDIDOECOMMERCE
         );
+
         const nfeDate: Date = await this.getNfeDate(orderId);
 
         const adjustedNfeDate = new Date(nfeDate);
@@ -78,9 +84,18 @@ export class InvoiceDateCorrectionService {
   }
 
   private async getOrderid(vtexId: string): Promise<number> {
-    const query = `select id from orders where vtex_id = $1`;
-    const result = await SentryDatasource.query(query, [vtexId]);
-    return result[0].id;
+    const query = `SELECT id, status FROM orders WHERE vtex_id = $1`;
+    const orders: TOrderRecord[] = await SentryDatasource.query(query, [
+      vtexId,
+    ]);
+
+    const [primaryOrder, fallbackOrder] = orders;
+
+    if (primaryOrder.status === 'troca_loja' && fallbackOrder) {
+      return fallbackOrder.id;
+    }
+
+    return primaryOrder.id;
   }
 
   private async getOrderListFromMega(): Promise<TOrdersFromMega[]> {
